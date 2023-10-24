@@ -91,7 +91,7 @@ impl Game {
         let grid_index = index_y.floor() * 3. + index_x.floor();
 
         // check if the user is allowed to press there
-        if !self.allowed_grids[grid_index as usize] {
+        if !(0..9).contains(&(grid_index as usize)) || !self.allowed_grids[grid_index as usize] {
             return;
         }
 
