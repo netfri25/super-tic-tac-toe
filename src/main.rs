@@ -35,7 +35,6 @@ async fn main() {
             draw_rectangle(x, y, w, h, color);
         }
 
-        game.grid.update_winner();
         if game.grid.winner().is_some() {
             game.allowed_grids = [true; 9]
         }
@@ -134,6 +133,8 @@ impl Game {
         } else {
             false
         };
+
+        self.grid.update_winner();
 
         // set all the allowed grids
         if placed {
