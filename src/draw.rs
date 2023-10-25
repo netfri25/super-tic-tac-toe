@@ -1,7 +1,8 @@
 use macroquad::prelude::*;
 
 use crate::constants;
-use crate::grid::{Grid, Player, GeneralCell};
+use crate::game::Game;
+use crate::grid::{GeneralCell, Grid, Player};
 
 pub trait Drawable {
     fn draw(&self, bounds: Rect);
@@ -32,7 +33,7 @@ impl Drawable for Player {
 
 impl<D> Drawable for Option<D>
 where
-    D: Drawable
+    D: Drawable,
 {
     fn draw(&self, bounds: Rect) {
         let mouse_pos = mouse_position();
@@ -55,21 +56,41 @@ fn draw_x(bounds: Rect) {
     let x2 = bounds.x + bounds.w;
     let y2 = bounds.y + bounds.h;
     let size = bounds.w;
-    draw_line(x1, y1, x2, y2, size * constants::CELL_THICK, constants::X_COLOR);
+    draw_line(
+        x1,
+        y1,
+        x2,
+        y2,
+        size * constants::CELL_THICK,
+        constants::X_COLOR,
+    );
 
     let x1 = bounds.x + bounds.w;
     let y1 = bounds.y;
     let x2 = bounds.x;
     let y2 = bounds.y + bounds.h;
     let size = bounds.w;
-    draw_line(x1, y1, x2, y2, size * constants::CELL_THICK, constants::X_COLOR);
+    draw_line(
+        x1,
+        y1,
+        x2,
+        y2,
+        size * constants::CELL_THICK,
+        constants::X_COLOR,
+    );
 }
 
 fn draw_o(bounds: Rect) {
     let center = bounds.center();
     let radius = bounds.w / 2.;
     let size = bounds.w;
-    draw_circle_lines(center.x, center.y, radius, size * constants::CELL_THICK, constants::O_COLOR);
+    draw_circle_lines(
+        center.x,
+        center.y,
+        radius,
+        size * constants::CELL_THICK,
+        constants::O_COLOR,
+    );
 }
 
 impl<C> Drawable for Grid<C>
@@ -79,7 +100,7 @@ where
     fn draw(&self, bounds: Rect) {
         if let Some(player) = self.winner() {
             player.draw(bounds);
-            return
+            return;
         }
 
         let size = bounds.w;
@@ -109,5 +130,30 @@ where
             let rect = Rect::new(bounds.x + w * col, bounds.y + h * row, w, h);
             cell.draw(pad_rect(rect, constants::PAD));
         }
+
+        for i in 0..self.allowed().len() {
+            let allowed = self.allowed()[i];
+            let won = self.cells()[i].cvalue().is_some();
+            if allowed || won {
+                continue;
+            }
+
+            let row = i / 3;
+            let col = i % 3;
+            let w = bounds.w / 3.;
+            let h = bounds.h / 3.;
+            let x = bounds.x + w * col as f32;
+            let y = bounds.y + h * row as f32;
+            let Rect { x, y, w, h } = pad_rect(Rect::new(x, y, w, h), constants::PAD / 2.);
+            let mut color = RED;
+            color.a /= 2.;
+            draw_rectangle(x, y, w, h, color);
+        }
+    }
+}
+
+impl Drawable for Game {
+    fn draw(&self, bounds: Rect) {
+        self.grid.draw(bounds);
     }
 }

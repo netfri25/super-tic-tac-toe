@@ -307,7 +307,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "super-tic-tac-tow"
+name = "super-tic-tac-toe"
 version = "0.1.0"
 dependencies = [
  "itertools",

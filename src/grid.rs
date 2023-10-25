@@ -1,6 +1,23 @@
 use itertools::Itertools;
+use macroquad::prelude::*;
+
+pub enum ClickResult {
+    Invalid,
+    SetCell,
+    SetIndex(usize),
+}
+use ClickResult::*;
+
+use crate::{constants::PAD, draw::pad_rect};
+
+impl ClickResult {
+    pub fn is_valid(&self) -> bool {
+        !matches!(self, Invalid)
+    }
+}
 
 pub trait GeneralCell {
+    fn click(&mut self, player: Player, bounds: Rect) -> ClickResult;
     fn cupdate(&mut self);
     fn cvalue(&self) -> Option<Player>;
 }
@@ -25,15 +42,27 @@ pub type Cell = Option<Player>;
 impl GeneralCell for Cell {
     fn cupdate(&mut self) {}
 
+    fn click(&mut self, player: Player, bounds: Rect) -> ClickResult {
+        let mouse_pos = mouse_position().into();
+
+        if bounds.contains(mouse_pos) && self.is_none() {
+            *self = Some(player);
+            SetCell
+        } else {
+            Invalid
+        }
+    }
+
     fn cvalue(&self) -> Option<Player> {
         *self
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Grid<C> {
     cells: [C; 9],
     winner: Option<Player>,
+    allowed: [bool; 9],
 }
 
 impl<C> Grid<C> {
@@ -41,7 +70,11 @@ impl<C> Grid<C> {
     where
         C: Default,
     {
-        Self::default()
+        Self {
+            cells: Default::default(),
+            winner: None,
+            allowed: [true; 9],
+        }
     }
 
     pub fn cells(&self) -> &[C; 9] {
@@ -52,8 +85,12 @@ impl<C> Grid<C> {
         self.winner
     }
 
-    pub fn update_with<T>(&mut self, row: usize, col: usize, func: impl FnOnce(&mut C) -> T) -> Option<T> {
-        self.cells.get_mut(row * 3 + col).map(func)
+    pub fn allowed(&self) -> &[bool; 9] {
+        &self.allowed
+    }
+
+    pub fn update_with<T>(&mut self, index: usize, func: impl FnOnce(&mut C) -> T) -> Option<T> {
+        self.cells.get_mut(index).map(func)
     }
 
     // TODO: there MUST be a cleaner way to do this
@@ -104,6 +141,15 @@ impl<C> Grid<C> {
     }
 }
 
+impl<C> Default for Grid<C>
+where
+    C: Default,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // a Grid can act as a Cell
 impl<C> GeneralCell for Grid<C>
 where
@@ -116,4 +162,66 @@ where
     fn cvalue(&self) -> Option<Player> {
         self.winner()
     }
+
+    fn click(&mut self, player: Player, bounds: Rect) -> ClickResult {
+        let mouse_pos = mouse_position().into();
+        if !bounds.contains(mouse_pos) {
+            return Invalid;
+        }
+
+        let nx = (mouse_pos.x - bounds.x) / bounds.w;
+        let ny = (mouse_pos.y - bounds.y) / bounds.h;
+
+        let Some(index) = grid_index(nx, ny) else {
+            return Invalid;
+        };
+
+        if !self.allowed[index] {
+            return Invalid;
+        }
+
+        let place_result = self
+            .update_with(index, |cell| {
+                let row = (index / 3) as f32;
+                let col = (index % 3) as f32;
+                let w = bounds.w / 3.;
+                let h = bounds.h / 3.;
+                let x = col * w + bounds.x;
+                let y = row * h + bounds.y;
+                let new_rect = pad_rect(Rect::new(x, y, w, h), PAD);
+                cell.click(player, new_rect)
+            })
+            .unwrap();
+
+        match place_result {
+            Invalid => return Invalid,
+            SetCell => {}
+            SetIndex(inner_index) => {
+                if self.cells[inner_index].cvalue().is_some() {
+                    self.allowed = [true; 9];
+                } else {
+                    self.allowed = [false; 9];
+                    self.allowed[inner_index] = true;
+                }
+            }
+        };
+
+        self.update_winner();
+
+        if self.winner.is_some() {
+            self.allowed = [true; 9];
+        }
+
+        SetIndex(index)
+    }
+}
+
+pub fn grid_index(x: f32, y: f32) -> Option<usize> {
+    if !(0f32..=1f32).contains(&x) || !(0f32..=1f32).contains(&y) {
+        return None;
+    }
+    let col = x * 3.;
+    let row = y * 3.;
+    let index = row as usize * 3 + col as usize;
+    Some(index)
 }
