@@ -18,6 +18,7 @@ impl ClickResult {
 
 pub trait GeneralCell {
     fn click(&mut self, player: Player, bounds: Rect) -> ClickResult;
+    fn is_draw(&self) -> bool;
     fn cupdate(&mut self);
     fn cvalue(&self) -> Option<Player>;
 }
@@ -55,6 +56,10 @@ impl GeneralCell for Cell {
 
     fn cvalue(&self) -> Option<Player> {
         *self
+    }
+
+    fn is_draw(&self) -> bool {
+        false
     }
 }
 
@@ -193,11 +198,13 @@ where
             })
             .unwrap();
 
+        self.update_winner();
+
         match place_result {
             Invalid => return Invalid,
             SetCell => {}
             SetIndex(inner_index) => {
-                if self.cells[inner_index].cvalue().is_some() {
+                if self.cells[inner_index].cvalue().is_some() || self.cells[inner_index].is_draw() {
                     self.allowed = [true; 9];
                 } else {
                     self.allowed = [false; 9];
@@ -206,13 +213,15 @@ where
             }
         };
 
-        self.update_winner();
-
         if self.winner.is_some() {
             self.allowed = [true; 9];
         }
 
         SetIndex(index)
+    }
+
+    fn is_draw(&self) -> bool {
+        self.cells.iter().all(|c| c.is_draw() || c.cvalue().is_some())
     }
 }
 
