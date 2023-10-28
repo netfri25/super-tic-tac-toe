@@ -18,6 +18,10 @@ async fn main() {
             game.mouse_press(rect)
         }
 
+        if is_key_pressed(KeyCode::R) {
+            game = Game::new();
+        }
+
         game.draw(rect);
         next_frame().await
     }
