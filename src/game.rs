@@ -23,13 +23,16 @@ impl Game {
         }
     }
 
-    pub fn mouse_press(&mut self, bounds: Rect) {
+    pub fn mouse_press(&mut self, bounds: Rect) -> bool {
         let indices = IndicesGenerator::new(mouse_position().into(), bounds);
-        self.play(indices);
+        self.play(indices)
     }
 
     pub fn play(&mut self, indices: impl Iterator<Item = usize> + Clone) -> bool {
-        let Some(history) = self.grid.get_history(indices.clone()) else { return false };
+        let Some(history) = self.grid.get_history(indices.clone()) else {
+            return false
+        };
+
         let placed = self.grid.play(self.turn, indices.clone());
 
         let valid = placed.is_valid();

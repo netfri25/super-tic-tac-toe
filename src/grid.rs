@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, ops::Range};
 
 use itertools::Itertools;
 use macroquad::prelude::*;
@@ -27,6 +27,7 @@ pub trait GeneralCell {
     fn is_draw(&self) -> bool;
     fn value(&self) -> Option<Player>;
     fn get_history(&self, indices: impl Iterator<Item = usize>) -> Option<VecDeque<AllowedStatus>>;
+    fn allowed_range(&self) -> Range<usize>; // range of all of the allowed indices
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +78,10 @@ impl GeneralCell for Cell {
 
     fn get_history(&self, _indices: impl Iterator<Item = usize>) -> Option<VecDeque<AllowedStatus>> {
         Some(VecDeque::new())
+    }
+
+    fn allowed_range(&self) -> Range<usize> {
+        0..0 // empty range
     }
 }
 
@@ -242,9 +247,8 @@ where
         Some(history)
     }
 
-    // fn get_allowed(&self, mut indices: impl Iterator<Item = usize>, allowed: &mut Vec<OnlyAllowed>) {
-    //     allowed.push(self.only_allowed);
-    //     let index = indices.next().unwrap();
-    //     self.cells[index].get_allowed(indices, allowed);
-    // }
+
+    fn allowed_range(&self) -> Range<usize> {
+        self.only_allowed.map(|n| n..n+1).unwrap_or(0..9)
+    }
 }

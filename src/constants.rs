@@ -11,3 +11,5 @@ pub const BLOCKED_COLOR: Color = {
     color.a /= 4.;
     color
 };
+
+pub const MAX_SEARCH_DEPTH: usize = 6;
