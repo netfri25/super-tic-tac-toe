@@ -1,26 +1,26 @@
 use itertools::Itertools;
 use macroquad::prelude::*;
 
-pub enum ClickResult {
+#[derive(Debug)]
+pub enum PlayResult {
     Invalid,
     SetCell,
     SetIndex(usize),
 }
-use ClickResult::*;
+use PlayResult::*;
 
-use crate::{constants::PAD, draw::pad_rect};
-
-impl ClickResult {
+impl PlayResult {
     pub fn is_valid(&self) -> bool {
         !matches!(self, Invalid)
     }
 }
 
 pub trait GeneralCell {
-    fn click(&mut self, player: Player, bounds: Rect) -> ClickResult;
+    const DEPTH: usize;
+
+    fn play(&mut self, player: Player, moves: impl Iterator<Item = usize>) -> PlayResult;
     fn is_draw(&self) -> bool;
-    fn cupdate(&mut self);
-    fn cvalue(&self) -> Option<Player>;
+    fn value(&self) -> Option<Player>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,20 +41,18 @@ impl Player {
 pub type Cell = Option<Player>;
 
 impl GeneralCell for Cell {
-    fn cupdate(&mut self) {}
+    const DEPTH: usize = 0;
 
-    fn click(&mut self, player: Player, bounds: Rect) -> ClickResult {
-        let mouse_pos = mouse_position().into();
-
-        if bounds.contains(mouse_pos) && self.is_none() {
-            *self = Some(player);
-            SetCell
-        } else {
-            Invalid
+    fn play(&mut self, player: Player, _moves: impl Iterator<Item = usize>) -> PlayResult {
+        if self.is_some() {
+            return Invalid
         }
+
+        *self = Some(player);
+        SetCell
     }
 
-    fn cvalue(&self) -> Option<Player> {
+    fn value(&self) -> Option<Player> {
         *self
     }
 
@@ -63,11 +61,13 @@ impl GeneralCell for Cell {
     }
 }
 
-#[derive(Debug, Clone)]
+pub type OnlyAllowed = Option<usize>;
+
+#[derive(Debug)]
 pub struct Grid<C> {
     cells: [C; 9],
     winner: Option<Player>,
-    allowed: [bool; 9],
+    only_allowed: OnlyAllowed, // None when all of them are allowed
 }
 
 impl<C> Grid<C> {
@@ -78,24 +78,24 @@ impl<C> Grid<C> {
         Self {
             cells: Default::default(),
             winner: None,
-            allowed: [true; 9],
+            only_allowed: None,
         }
     }
 
-    pub fn cells(&self) -> &[C; 9] {
+    pub const fn cells(&self) -> &[C; 9] {
         &self.cells
     }
 
-    pub fn winner(&self) -> Option<Player> {
+    pub const fn winner(&self) -> Option<Player> {
         self.winner
     }
 
-    pub fn allowed(&self) -> &[bool; 9] {
-        &self.allowed
-    }
-
-    pub fn update_with<T>(&mut self, index: usize, func: impl FnOnce(&mut C) -> T) -> Option<T> {
-        self.cells.get_mut(index).map(func)
+    pub const fn allowed(&self, index: usize) -> bool {
+        if let Some(allowed_index) = self.only_allowed {
+            index == allowed_index
+        } else {
+            true
+        }
     }
 
     // TODO: there MUST be a cleaner way to do this
@@ -103,7 +103,7 @@ impl<C> Grid<C> {
     where
         C: GeneralCell,
     {
-        self.cells.iter_mut().for_each(C::cupdate);
+        self.winner = None;
 
         let tl = &self.cells[0];
         let tr = &self.cells[2];
@@ -112,34 +112,34 @@ impl<C> Grid<C> {
         let br = &self.cells[8];
 
         for slope in [[tl, mm, br], [tr, mm, bl]] {
-            if slope.iter().all(|c| c.cvalue().is_some())
-                && slope.iter().map(|c| c.cvalue()).all_equal()
+            if slope.iter().all(|c| c.value().is_some())
+                && slope.iter().map(|c| c.value()).all_equal()
             {
-                self.winner = slope[0].cvalue();
+                self.winner = slope[0].value();
                 return;
             }
         }
 
         for i in 0..3 {
             // check rows
-            let mut iter = self.cells.iter().skip(i * 3).take(3).map(C::cvalue);
+            let mut iter = self.cells.iter().skip(i * 3).take(3).map(C::value);
             if let Some(winner) = iter
                 .clone()
                 .next()
                 .filter(|cell| cell.is_some() && iter.all_equal())
             {
-                self.winner = winner.cvalue();
+                self.winner = winner.value();
                 break;
             }
 
             // check columns
-            let mut iter = self.cells.iter().skip(i).step_by(3).map(C::cvalue);
+            let mut iter = self.cells.iter().skip(i).step_by(3).map(C::value);
             if let Some(winner) = iter
                 .clone()
                 .next()
                 .filter(|cell| cell.is_some() && iter.all_equal())
             {
-                self.winner = winner.cvalue();
+                self.winner = winner.value();
                 break;
             }
         }
@@ -160,43 +160,23 @@ impl<C> GeneralCell for Grid<C>
 where
     C: GeneralCell,
 {
-    fn cupdate(&mut self) {
-        self.update_winner()
-    }
+    const DEPTH: usize = 1 + C::DEPTH;
 
-    fn cvalue(&self) -> Option<Player> {
+    fn value(&self) -> Option<Player> {
         self.winner()
     }
 
-    fn click(&mut self, player: Player, bounds: Rect) -> ClickResult {
-        let mouse_pos = mouse_position().into();
-        if !bounds.contains(mouse_pos) {
-            return Invalid;
-        }
-
-        let nx = (mouse_pos.x - bounds.x) / bounds.w;
-        let ny = (mouse_pos.y - bounds.y) / bounds.h;
-
-        let Some(index) = grid_index(nx, ny) else {
+    fn play(&mut self, player: Player, mut moves: impl Iterator<Item = usize>) -> PlayResult {
+        let Some(index) = moves.next() else {
             return Invalid;
         };
 
-        if !self.allowed[index] {
+        if !self.allowed(index) {
             return Invalid;
         }
 
-        let place_result = self
-            .update_with(index, |cell| {
-                let row = (index / 3) as f32;
-                let col = (index % 3) as f32;
-                let w = bounds.w / 3.;
-                let h = bounds.h / 3.;
-                let x = col * w + bounds.x;
-                let y = row * h + bounds.y;
-                let new_rect = pad_rect(Rect::new(x, y, w, h), PAD);
-                cell.click(player, new_rect)
-            })
-            .unwrap();
+        let cell = &mut self.cells[index];
+        let place_result = cell.play(player, moves);
 
         self.update_winner();
 
@@ -204,33 +184,18 @@ where
             Invalid => return Invalid,
             SetCell => {}
             SetIndex(inner_index) => {
-                if self.cells[inner_index].cvalue().is_some() || self.cells[inner_index].is_draw() {
-                    self.allowed = [true; 9];
+                if self.cells[inner_index].value().is_some() || self.cells[inner_index].is_draw() {
+                    self.only_allowed = None;
                 } else {
-                    self.allowed = [false; 9];
-                    self.allowed[inner_index] = true;
+                    self.only_allowed = Some(inner_index);
                 }
             }
         };
-
-        if self.winner.is_some() {
-            self.allowed = [true; 9];
-        }
 
         SetIndex(index)
     }
 
     fn is_draw(&self) -> bool {
-        self.cells.iter().all(|c| c.is_draw() || c.cvalue().is_some())
+        self.cells.iter().all(|c| c.is_draw() || c.value().is_some())
     }
-}
-
-pub fn grid_index(x: f32, y: f32) -> Option<usize> {
-    if !(0f32..=1f32).contains(&x) || !(0f32..=1f32).contains(&y) {
-        return None;
-    }
-    let col = x * 3.;
-    let row = y * 3.;
-    let index = row as usize * 3 + col as usize;
-    Some(index)
 }

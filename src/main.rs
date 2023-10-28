@@ -22,7 +22,7 @@ async fn main() {
             game = Game::new();
         }
 
-        game.draw(rect);
+        game.draw(rect, true);
         next_frame().await
     }
 }
