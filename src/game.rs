@@ -1,14 +1,17 @@
+use std::collections::VecDeque;
+
 use macroquad::prelude::*;
 
 use crate::constants::PAD;
 use crate::draw::pad_rect;
-use crate::grid::{Cell, GeneralCell, Grid, Player};
+use crate::grid::{Cell, GeneralCell, Grid, Player, AllowedStatus};
 
 pub type GameGrid = Grid<Grid<Cell>>;
 
 pub struct Game {
     pub grid: GameGrid,
     pub turn: Player,
+    pub history: Vec<VecDeque<AllowedStatus>>,
 }
 
 impl Game {
@@ -16,14 +19,31 @@ impl Game {
         Game {
             grid: Grid::new(),
             turn: Player::X,
+            history: Vec::new(),
         }
     }
 
     pub fn mouse_press(&mut self, bounds: Rect) {
         let indices = IndicesGenerator::new(mouse_position().into(), bounds);
-        let placed = self.grid.play(self.turn, indices);
+        self.play(indices);
+    }
 
-        if placed.is_valid() {
+    pub fn play(&mut self, indices: impl Iterator<Item = usize> + Clone) -> bool {
+        let Some(history) = self.grid.get_history(indices.clone()) else { return false };
+        let placed = self.grid.play(self.turn, indices.clone());
+
+        let valid = placed.is_valid();
+        if valid {
+            self.turn.switch();
+            self.history.push(history);
+        }
+
+        valid
+    }
+
+    pub fn rewind_step(&mut self) {
+        if let Some(last) = self.history.pop() {
+            self.grid.unplay(last.into_iter());
             self.turn.switch();
         }
     }
@@ -35,6 +55,7 @@ impl Default for Game {
     }
 }
 
+#[derive(Clone)]
 struct IndicesGenerator {
     position: Vec2,
     bounds: Rect,

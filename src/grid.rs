@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use itertools::Itertools;
 use macroquad::prelude::*;
 
@@ -15,12 +17,16 @@ impl PlayResult {
     }
 }
 
+pub type AllowedStatus = (usize, OnlyAllowed);
+
 pub trait GeneralCell {
     const DEPTH: usize;
 
-    fn play(&mut self, player: Player, moves: impl Iterator<Item = usize>) -> PlayResult;
+    fn play(&mut self, player: Player, indices: impl Iterator<Item = usize>) -> PlayResult;
+    fn unplay(&mut self, history: impl Iterator<Item = AllowedStatus>) -> bool;
     fn is_draw(&self) -> bool;
     fn value(&self) -> Option<Player>;
+    fn get_history(&self, indices: impl Iterator<Item = usize>) -> Option<VecDeque<AllowedStatus>>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,13 +49,22 @@ pub type Cell = Option<Player>;
 impl GeneralCell for Cell {
     const DEPTH: usize = 0;
 
-    fn play(&mut self, player: Player, _moves: impl Iterator<Item = usize>) -> PlayResult {
+    fn play(&mut self, player: Player, _indices: impl Iterator<Item = usize>) -> PlayResult {
         if self.is_some() {
-            return Invalid
+            return Invalid;
         }
 
         *self = Some(player);
         SetCell
+    }
+
+    fn unplay(&mut self, _history: impl Iterator<Item = (usize, OnlyAllowed)>) -> bool {
+        if self.is_none() {
+            return false;
+        }
+
+        *self = None;
+        true
     }
 
     fn value(&self) -> Option<Player> {
@@ -58,6 +73,10 @@ impl GeneralCell for Cell {
 
     fn is_draw(&self) -> bool {
         false
+    }
+
+    fn get_history(&self, _indices: impl Iterator<Item = usize>) -> Option<VecDeque<AllowedStatus>> {
+        Some(VecDeque::new())
     }
 }
 
@@ -162,12 +181,8 @@ where
 {
     const DEPTH: usize = 1 + C::DEPTH;
 
-    fn value(&self) -> Option<Player> {
-        self.winner()
-    }
-
-    fn play(&mut self, player: Player, mut moves: impl Iterator<Item = usize>) -> PlayResult {
-        let Some(index) = moves.next() else {
+    fn play(&mut self, player: Player, mut indices: impl Iterator<Item = usize>) -> PlayResult {
+        let Some(index) = indices.next() else {
             return Invalid;
         };
 
@@ -176,7 +191,7 @@ where
         }
 
         let cell = &mut self.cells[index];
-        let place_result = cell.play(player, moves);
+        let place_result = cell.play(player, indices);
 
         self.update_winner();
 
@@ -195,7 +210,41 @@ where
         SetIndex(index)
     }
 
-    fn is_draw(&self) -> bool {
-        self.cells.iter().all(|c| c.is_draw() || c.value().is_some())
+    fn unplay(&mut self, mut history: impl Iterator<Item = (usize, OnlyAllowed)>) -> bool {
+        let Some((index, only_allowed)) = history.next() else {
+            return false;
+        };
+
+        if !self.cells[index].unplay(history) {
+            return false;
+        }
+
+        self.only_allowed = only_allowed;
+        self.update_winner();
+
+        true
     }
+
+    fn is_draw(&self) -> bool {
+        self.cells
+            .iter()
+            .all(|c| c.is_draw() || c.value().is_some())
+    }
+
+    fn value(&self) -> Option<Player> {
+        self.winner()
+    }
+
+    fn get_history(&self, mut indices: impl Iterator<Item = usize>) -> Option<VecDeque<AllowedStatus>> {
+        let index = indices.next()?;
+        let mut history = self.cells[index].get_history(indices)?;
+        history.push_front((index, self.only_allowed));
+        Some(history)
+    }
+
+    // fn get_allowed(&self, mut indices: impl Iterator<Item = usize>, allowed: &mut Vec<OnlyAllowed>) {
+    //     allowed.push(self.only_allowed);
+    //     let index = indices.next().unwrap();
+    //     self.cells[index].get_allowed(indices, allowed);
+    // }
 }

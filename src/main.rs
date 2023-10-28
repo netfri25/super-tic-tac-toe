@@ -13,16 +13,20 @@ mod grid;
 async fn main() {
     let mut game = Game::new();
     loop {
-        let rect = calc_screen_rect();
+        let bounds = calc_screen_rect();
         if is_mouse_button_pressed(MouseButton::Left) {
-            game.mouse_press(rect)
+            game.mouse_press(bounds);
         }
 
         if is_key_pressed(KeyCode::R) {
             game = Game::new();
         }
 
-        game.draw(rect, true);
+        if is_key_pressed(KeyCode::Z) {
+            game.rewind_step();
+        }
+
+        game.draw(bounds, true);
         next_frame().await
     }
 }
