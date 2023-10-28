@@ -2,7 +2,6 @@ use macroquad::prelude::*;
 
 use crate::constants::PAD;
 use crate::draw::pad_rect;
-use crate::grader::{Grade, Gradeable};
 use crate::grid::{Cell, GeneralCell, Grid, Player};
 
 pub type GameGrid = Grid<Grid<Cell>>;
@@ -27,10 +26,6 @@ impl Game {
         if placed.is_valid() {
             self.turn.switch();
         }
-    }
-
-    pub fn grade(&self) -> Grade {
-        self.grid.status_grade(self.turn)
     }
 }
 
