@@ -145,9 +145,7 @@ where
             let x = bounds.x + w * col as f32;
             let y = bounds.y + h * row as f32;
             let Rect { x, y, w, h } = pad_rect(Rect::new(x, y, w, h), constants::PAD / 2.);
-            let mut color = RED;
-            color.a /= 2.;
-            draw_rectangle(x, y, w, h, color);
+            draw_rectangle(x, y, w, h, constants::BLOCKED_COLOR);
         }
     }
 }
