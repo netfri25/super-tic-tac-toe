@@ -2,7 +2,7 @@ use macroquad::prelude::*;
 use macroquad::rand::ChooseRandom;
 
 mod draw;
-use draw::{Drawable, pad_rect};
+use draw::Drawable;
 
 mod game;
 use game::Game;
