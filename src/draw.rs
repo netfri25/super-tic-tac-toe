@@ -149,5 +149,35 @@ where
 impl Drawable for Game {
     fn draw(&self, bounds: Rect, highlight_mouse: bool) {
         self.grid.draw(bounds, highlight_mouse);
+        if let Some(suggestion) = self.suggestion.as_ref().filter(|_| self.suggest) {
+            for (i, (suggestion, eval)) in suggestion.moves.iter().zip(suggestion.evals.iter()).enumerate() {
+                draw_best(suggestion.iter().cloned(), bounds);
+                let suggestion_text = format!("{:?}: {:.5}", suggestion, eval);
+                let font_size = screen_height() / 20.;
+                let y = (i + 1) as f32 * font_size;
+                draw_text(&suggestion_text, 0., y, font_size, WHITE);
+            }
+        }
+
+        if self.grid.winner().is_none() {
+            let w = screen_width() / 7.;
+            let turn_rect = Rect::new(screen_width() - w - constants::PAD, screen_height() - w - constants::PAD, w, w);
+            self.turn.draw(pad_rect(turn_rect, constants::PAD), false);
+        }
+    }
+}
+
+fn draw_best(mut best: impl Iterator<Item = usize>, bounds: Rect) {
+    let w = bounds.w / 3.;
+    let h = bounds.h / 3.;
+
+    if let Some(i) = best.next() {
+        let (row, col) = (i / 3, i % 3);
+        let (row, col) = (row as f32, col as f32);
+        let rect = Rect::new(bounds.x + w * col, bounds.y + h * row, w, h);
+        draw_best(best, pad_rect(rect, constants::PAD));
+    } else {
+        // let bounds = pad_rect(bounds, constants::PAD);
+        draw_rectangle(bounds.x, bounds.y, bounds.w, bounds.h, GREEN);
     }
 }

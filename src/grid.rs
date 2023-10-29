@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, ops::Range};
+use std::collections::VecDeque;
 
 use itertools::Itertools;
 use macroquad::prelude::*;
@@ -10,6 +10,8 @@ pub enum PlayResult {
     SetIndex(usize),
 }
 use PlayResult::*;
+
+use crate::constants;
 
 impl PlayResult {
     pub fn is_valid(&self) -> bool {
@@ -27,7 +29,7 @@ pub trait GeneralCell {
     fn is_draw(&self) -> bool;
     fn value(&self) -> Option<Player>;
     fn get_history(&self, indices: impl Iterator<Item = usize>) -> Option<VecDeque<AllowedStatus>>;
-    fn allowed_range(&self) -> Range<usize>; // range of all of the allowed indices
+    fn allowed_indices(&self) -> AllowedIndices;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,20 +70,20 @@ impl GeneralCell for Cell {
         true
     }
 
-    fn value(&self) -> Option<Player> {
-        *self
-    }
-
     fn is_draw(&self) -> bool {
         false
+    }
+
+    fn value(&self) -> Option<Player> {
+        *self
     }
 
     fn get_history(&self, _indices: impl Iterator<Item = usize>) -> Option<VecDeque<AllowedStatus>> {
         Some(VecDeque::new())
     }
 
-    fn allowed_range(&self) -> Range<usize> {
-        0..0 // empty range
+    fn allowed_indices(&self) -> AllowedIndices {
+        AllowedIndices::Nothing
     }
 }
 
@@ -247,8 +249,56 @@ where
         Some(history)
     }
 
-
-    fn allowed_range(&self) -> Range<usize> {
-        self.only_allowed.map(|n| n..n+1).unwrap_or(0..9)
+    fn allowed_indices(&self) -> AllowedIndices {
+        match self.only_allowed {
+            Some(index) => AllowedIndices::Only(index),
+            None => AllowedIndices::Everything,
+        }
     }
 }
+
+pub enum AllowedIndices {
+    Everything,
+    Nothing,
+    Only(usize),
+}
+
+impl IntoIterator for AllowedIndices {
+    type IntoIter = AllowedIndicesIter;
+
+    type Item = usize;
+
+    fn into_iter(self) -> Self::IntoIter {
+        AllowedIndicesIter {
+            state: self,
+            index: 0,
+        }
+    }
+}
+
+pub struct AllowedIndicesIter {
+    state: AllowedIndices,
+    index: usize,
+}
+
+impl Iterator for AllowedIndicesIter {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.state {
+            AllowedIndices::Everything if self.index < 9 => {
+                let index = constants::INDICES_ORDER[self.index];
+                self.index += 1;
+                Some(index)
+            },
+
+            AllowedIndices::Only(index) => {
+                self.state = AllowedIndices::Nothing;
+                Some(index)
+            },
+
+            _ => None,
+        }
+    }
+}
+

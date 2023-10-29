@@ -12,4 +12,9 @@ pub const BLOCKED_COLOR: Color = {
     color
 };
 
-pub const MAX_SEARCH_DEPTH: usize = 6;
+pub const MAX_SEARCH_DEPTH: usize = 8;
+
+pub const INDICES_ORDER: [usize; 9] = [4, 0, 2, 6, 8, 1, 3, 5, 7];
+
+pub const EVALUATION_MIN: i32 = i16::MIN as i32;
+pub const EVALUATION_MAX: i32 = i16::MAX as i32;

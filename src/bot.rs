@@ -2,16 +2,21 @@ use std::collections::VecDeque;
 
 use itertools::Itertools;
 
-use crate::constants;
+use crate::constants::{self, EVALUATION_MAX, EVALUATION_MIN};
 use crate::grid::{GeneralCell, Cell, Grid, Player};
 use crate::game::Game;
 
-pub fn get_best_moves(game: &mut Game) -> (Vec<VecDeque<usize>>, Vec<f32>) {
+pub struct Suggestion {
+    pub moves: Vec<VecDeque<usize>>,
+    pub evals: Vec<Evaluation>,
+}
+
+pub fn get_best_moves(game: &mut Game) -> Suggestion {
     let options = game.grid.generate_moves()
         .into_iter()
         .map(|indices| {
             game.play(indices.clone().into_iter());
-            let eval = -search(game, -1., 1., constants::MAX_SEARCH_DEPTH);
+            let eval = -search(game, constants::EVALUATION_MIN, constants::EVALUATION_MAX, constants::MAX_SEARCH_DEPTH);
             game.rewind_step();
             (indices, eval)
         })
@@ -20,7 +25,7 @@ pub fn get_best_moves(game: &mut Game) -> (Vec<VecDeque<usize>>, Vec<f32>) {
     let max_set = options.into_iter().max_set_by(|(_, a_eval), (_, b_eval)| a_eval.partial_cmp(b_eval).unwrap());
     let evals = max_set.iter().map(|(_, eval)| *eval).collect_vec();
     let moves = max_set.into_iter().map(|(indices, _)| indices).collect_vec();
-    (moves, evals)
+    Suggestion { moves, evals }
 }
 
 trait MoveGeneration: GeneralCell {
@@ -48,7 +53,7 @@ where
 
         let mut result = Vec::new();
 
-        for i in self.allowed_range() {
+        for i in self.allowed_indices() {
             let mut inner_moves = self.cells()[i].generate_moves();
             if inner_moves.is_empty() { continue }
             inner_moves.iter_mut().for_each(|v| v.push_front(i));
@@ -59,41 +64,54 @@ where
     }
 }
 
-trait Evaluate  {
-    fn evaluate(&self, player: Player) -> f32;
+pub type Evaluation = i32;
+
+trait Evaluate {
+    fn evaluate(&self, player: Player) -> Evaluation;
 }
 
 impl Evaluate for Player {
-    fn evaluate(&self, player: Player) -> f32 {
-        if *self == player { 1. } else { -1. }
+    fn evaluate(&self, player: Player) -> Evaluation {
+        if *self == player { EVALUATION_MAX } else { EVALUATION_MIN }
     }
 }
 
 impl Evaluate for Cell {
-    fn evaluate(&self, player: Player) -> f32 {
-        self.map(|p| p.evaluate(player)).unwrap_or(0.)
+    fn evaluate(&self, player: Player) -> Evaluation {
+        self.map(|p| p.evaluate(player)).unwrap_or(0)
     }
 }
 
 impl<C> Evaluate for Grid<C>
 where
-    C: Evaluate
+    C: Evaluate + GeneralCell
 {
-    fn evaluate(&self, player: Player) -> f32 {
+    fn evaluate(&self, player: Player) -> Evaluation {
+        if self.is_draw() {
+            return 0;
+        }
+
         if let Some(winner) = self.winner() {
             winner.evaluate(player)
         } else {
             let weights = [
-                3. / 8., 1. / 4., 3. / 8.,
-                1. / 4., 1. / 2., 1. / 4.,
-                3. / 8., 1. / 4., 3. / 8.,
+                3, 2, 3,
+                2, 4, 2,
+                3, 2, 3,
             ];
-            self.cells().iter().zip(weights).map(|(c, w)| c.evaluate(player) * w).sum::<f32>() / 9.
+
+            let weights_sum = weights.iter().sum::<Evaluation>();
+
+            self.cells()
+                .iter()
+                .zip(weights)
+                .map(|(c, num)| c.evaluate(player) * num)
+                .sum::<Evaluation>() / weights_sum
         }
     }
 }
 
-pub fn search(game: &mut Game, mut alpha: f32, beta: f32, depth: usize) -> f32 {
+pub fn search(game: &mut Game, mut alpha: Evaluation, beta: Evaluation, depth: usize) -> Evaluation {
     if depth == 0 {
         return game.grid.evaluate(game.turn);
     }

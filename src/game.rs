@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use macroquad::prelude::*;
 
+use crate::bot::{Suggestion, get_best_moves};
 use crate::constants::PAD;
 use crate::draw::pad_rect;
 use crate::grid::{Cell, GeneralCell, Grid, Player, AllowedStatus};
@@ -12,6 +13,8 @@ pub struct Game {
     pub grid: GameGrid,
     pub turn: Player,
     pub history: Vec<VecDeque<AllowedStatus>>,
+    pub suggest: bool,
+    pub suggestion: Option<Suggestion>,
 }
 
 impl Game {
@@ -20,6 +23,8 @@ impl Game {
             grid: Grid::new(),
             turn: Player::X,
             history: Vec::new(),
+            suggest: false,
+            suggestion: None,
         }
     }
 
@@ -49,6 +54,15 @@ impl Game {
             self.grid.unplay(last.into_iter());
             self.turn.switch();
         }
+    }
+
+    pub fn new_suggestion(&mut self) -> Option<&Suggestion> {
+        if !self.suggest {
+            return None
+        }
+
+        self.suggestion = Some(get_best_moves(self));
+        self.suggestion.as_ref()
     }
 }
 
