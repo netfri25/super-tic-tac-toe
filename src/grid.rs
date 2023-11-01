@@ -49,12 +49,20 @@ impl Grid {
         subgrid
     }
 
+    pub fn subgrids(&self) -> &[SubGrid] {
+        self.subgrids.as_slice()
+    }
+
     pub fn winner(&self) -> Option<Player> {
         self.to_subgrid().winner()
     }
 
     pub fn only_allowed(&self) -> Option<Index> {
         self.only_allowed
+    }
+
+    pub fn is_filled(&self) -> bool {
+        self.to_subgrid().is_filled()
     }
 }
 
@@ -102,8 +110,12 @@ impl SubGrid {
         }
     }
 
+    pub fn is_filled(&self) -> bool {
+        (self.x_bits | self.o_bits) == 0b111111111
+    }
+
     pub fn is_done(&self) -> bool {
-        (self.x_bits | self.o_bits) == 0b111111111 || self.winner().is_some()
+        self.is_filled() || self.winner().is_some()
     }
 
     pub fn winner(&self) -> Option<Player> {

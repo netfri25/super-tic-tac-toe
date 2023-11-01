@@ -1,5 +1,6 @@
 use macroquad::prelude::*;
 
+mod bot;
 mod layout;
 
 mod grid;
