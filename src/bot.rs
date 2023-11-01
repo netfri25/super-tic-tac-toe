@@ -7,14 +7,12 @@ pub const BOT_DEPTH: usize = 7;
 
 pub fn best_indices(grid: Grid, turn: Player) -> Vec<((u8, u8), Eval)> {
     let indices = generate_indices(&grid).collect_vec();
-    let mut searched = 0;
-    let best = indices
+    indices
         .into_iter()
         .map(|indices| {
             let mut grid = grid.clone();
             grid.play(indices, turn);
             let eval = -search(
-                &mut searched,
                 grid,
                 turn.other(),
                 -EVAL_WIN_WEIGHT,
@@ -22,11 +20,7 @@ pub fn best_indices(grid: Grid, turn: Player) -> Vec<((u8, u8), Eval)> {
                 BOT_DEPTH,
             );
             (indices, eval)
-        })
-        .max_set_by_key(|(_, eval)| *eval);
-
-    println!("searched {} positions", searched);
-    best
+        }).max_set_by_key(|(_, eval)| *eval)
 }
 
 pub type Eval = i32;
@@ -47,8 +41,8 @@ impl Evaluate for Player {
     }
 }
 
-const WEIGHTS_SUM: i32 = 24;
-const WEIGHTS: [i32; 9] = [3, 2, 3, 2, 4, 2, 3, 2, 3];
+const WEIGHTS_SUM: i32 = 48;
+const WEIGHTS: [i32; 9] = [6, 4, 6, 4, 8, 4, 6, 4, 6];
 
 impl Evaluate for Grid {
     fn eval(&self, player: Player) -> Eval {
@@ -92,7 +86,7 @@ fn generate_indices(grid: &Grid) -> impl Iterator<Item = (u8, u8)> + '_ {
     })
 }
 
-fn search(searched: &mut usize, grid: Grid, player: Player, mut alpha: Eval, beta: Eval, depth: usize) -> Eval {
+fn search(grid: Grid, player: Player, mut alpha: Eval, beta: Eval, depth: usize) -> Eval {
     if let Some(winner) = grid.winner() {
         return winner.eval(player) * EVAL_WIN_WEIGHT;
     }
@@ -111,10 +105,9 @@ fn search(searched: &mut usize, grid: Grid, player: Player, mut alpha: Eval, bet
     }
 
     for indices in all_indices {
-        *searched += 1;
         let mut grid = grid.clone();
         grid.play(indices, player);
-        let eval = -search(searched, grid, player.other(), -beta, -alpha, depth - 1);
+        let eval = -search(grid, player.other(), -beta, -alpha, depth - 1);
         alpha = eval.max(alpha);
         if eval >= beta { return beta }
     }

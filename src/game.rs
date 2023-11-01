@@ -1,7 +1,8 @@
 use macroquad::prelude::*;
 
 use crate::draw::{Drawable, Paddable};
-use crate::grid::{Grid, padded_grid};
+use crate::get_cells;
+use crate::grid::Grid;
 use crate::player::Player;
 use crate::utils::{PADDING, BLOCKED_COLOR, Indices, Index};
 
@@ -55,6 +56,10 @@ impl Game {
         self.grid.unplay(indices, only_allowed);
         self.turn = self.turn.other();
     }
+
+    pub fn finished(&self) -> bool {
+        self.grid.is_filled() || self.grid.winner().is_some()
+    }
 }
 
 impl Drawable for Game {
@@ -62,18 +67,9 @@ impl Drawable for Game {
         self.grid.draw(bounds);
 
         let mpos = mouse_position().into();
-        let rect = padded_grid(bounds, PADDING)
-            .enumerate()
-            .find(|(_, r)| r.contains(mpos))
-            .and_then(|(i, inner_grid)| {
-                padded_grid(inner_grid, PADDING)
-                    .enumerate()
-                    .find(|(_, r)| r.contains(mpos))
-                    .map(|(j, r)| ((i, j), r))
-            });
+        let cell = get_cells().find(|(_, r)| r.contains(mpos));
 
-        if let Some(((i, j), r)) = rect {
-            let indices = (i as u8, j as u8);
+        if let Some((indices, r)) = cell {
             if self.grid.is_valid(indices) {
                 let r = r.pad(PADDING);
                 draw_rectangle(r.x, r.y, r.w, r.h, BLOCKED_COLOR);
