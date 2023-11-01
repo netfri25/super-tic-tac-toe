@@ -3,7 +3,7 @@ use macroquad::prelude::*;
 mod layout;
 
 mod grid;
-use grid::{Grid, padded_grid};
+use grid::{Grid, padded_grid, Index};
 
 mod draw;
 use draw::{Paddable, Drawable};
@@ -37,9 +37,15 @@ fn window_conf() -> Conf {
     }
 }
 
+struct History {
+    only_allowed: Option<Index>,
+    indices: (u8, u8),
+}
+
 struct App {
     grid: Grid,
     turn: Player,
+    history: Vec<History>,
 }
 
 impl App {
@@ -52,6 +58,10 @@ impl App {
             return false;
         }
 
+        if is_key_pressed(KeyCode::Z) {
+            self.undo()
+        }
+
         true
     }
 
@@ -60,11 +70,26 @@ impl App {
             return;
         };
 
+        let only_allowed = self.grid.only_allowed();
         let played = self.grid.play(self.turn, indices.0, indices.1);
         if !played {
             return;
         }
 
+        self.history.push(History {
+            only_allowed,
+            indices,
+        });
+
+        self.turn = self.turn.other();
+    }
+
+    pub fn undo(&mut self) {
+        let Some(History { only_allowed, indices }) = self.history.pop() else {
+            return;
+        };
+
+        self.grid.unplay(indices.0, indices.1, only_allowed);
         self.turn = self.turn.other();
     }
 
@@ -84,6 +109,7 @@ impl Default for App {
         Self {
             grid: Default::default(),
             turn: Player::X,
+            history: Vec::new(),
         }
     }
 }

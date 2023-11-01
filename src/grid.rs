@@ -32,6 +32,11 @@ impl Grid {
         valid
     }
 
+    pub fn unplay(&mut self, outer_index: u8, inner_index: u8, only_allowed: Option<Index>) {
+        self.subgrids[outer_index as usize].unplay(inner_index);
+        self.only_allowed = only_allowed;
+    }
+
     pub fn to_subgrid(&self) -> SubGrid {
         let mut subgrid = SubGrid::default();
 
@@ -46,6 +51,10 @@ impl Grid {
 
     pub fn winner(&self) -> Option<Player> {
         self.to_subgrid().winner()
+    }
+
+    pub fn only_allowed(&self) -> Option<Index> {
+        self.only_allowed
     }
 }
 
@@ -134,6 +143,12 @@ impl SubGrid {
         }
 
         true
+    }
+
+    pub fn unplay(&mut self, index: u8) {
+        let mask = 1u16 << index;
+        self.x_bits &= !mask;
+        self.o_bits &= !mask;
     }
 
     pub fn empty(&self, index: u8) -> bool {
