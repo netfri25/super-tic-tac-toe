@@ -66,9 +66,12 @@ impl Grid {
     }
 
     pub fn is_valid(&self, outer_index: u8, inner_index: u8) -> bool {
+        let as_subgrid = self.to_subgrid();
+        let done = as_subgrid.is_done();
+        let empty = as_subgrid.empty(outer_index);
         let outer_allowed = self.only_allowed.map(|i| outer_index == i).unwrap_or(true);
         let inner_allowed = self.subgrids[outer_index as usize].empty(inner_index);
-        outer_allowed && inner_allowed
+        !done && empty && outer_allowed && inner_allowed
     }
 }
 
