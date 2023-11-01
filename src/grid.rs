@@ -1,304 +1,210 @@
-use std::collections::VecDeque;
-
-use itertools::Itertools;
 use macroquad::prelude::*;
 
-#[derive(Debug)]
-pub enum PlayResult {
-    Invalid,
-    SetCell,
-    SetIndex(usize),
-}
-use PlayResult::*;
+use crate::draw::{Drawable, Paddable};
+use crate::layout::Layout;
+use crate::player::Player;
+use crate::utils::{PADDING, THICK_MULT, BLOCKED_COLOR, GRID_LINES_COLOR, Indices, Index};
 
-use crate::constants;
-
-impl PlayResult {
-    pub fn is_valid(&self) -> bool {
-        !matches!(self, Invalid)
-    }
+#[derive(Debug, Default, Clone)]
+pub struct Grid {
+    subgrids: [SubGrid; 9],
+    only_allowed: Option<Index>,
 }
 
-pub type AllowedStatus = (usize, OnlyAllowed);
-
-pub trait GeneralCell {
-    const DEPTH: usize;
-
-    fn play(&mut self, player: Player, indices: impl Iterator<Item = usize>) -> PlayResult;
-    fn unplay(&mut self, history: impl Iterator<Item = AllowedStatus>) -> bool;
-    fn is_draw(&self) -> bool;
-    fn value(&self) -> Option<Player>;
-    fn get_history(&self, indices: impl Iterator<Item = usize>) -> Option<VecDeque<AllowedStatus>>;
-    fn allowed_indices(&self) -> AllowedIndices;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Player {
-    X,
-    O,
-}
-
-impl Player {
-    pub fn switch(&mut self) {
-        *self = match self {
-            Player::X => Player::O,
-            Player::O => Player::X,
-        }
-    }
-}
-
-pub type Cell = Option<Player>;
-
-impl GeneralCell for Cell {
-    const DEPTH: usize = 0;
-
-    fn play(&mut self, player: Player, _indices: impl Iterator<Item = usize>) -> PlayResult {
-        if self.is_some() {
-            return Invalid;
+impl Grid {
+    pub fn play(&mut self, indices: Indices, player: Player) -> bool {
+        let can_interact = self.only_allowed.map(|i| indices.0 == i).unwrap_or(true);
+        if !can_interact || self.subgrids[indices.0 as usize].is_done() {
+            return false
         }
 
-        *self = Some(player);
-        SetCell
-    }
-
-    fn unplay(&mut self, _history: impl Iterator<Item = (usize, OnlyAllowed)>) -> bool {
-        if self.is_none() {
-            return false;
-        }
-
-        *self = None;
-        true
-    }
-
-    fn is_draw(&self) -> bool {
-        false
-    }
-
-    fn value(&self) -> Option<Player> {
-        *self
-    }
-
-    fn get_history(&self, _indices: impl Iterator<Item = usize>) -> Option<VecDeque<AllowedStatus>> {
-        Some(VecDeque::new())
-    }
-
-    fn allowed_indices(&self) -> AllowedIndices {
-        AllowedIndices::Nothing
-    }
-}
-
-pub type OnlyAllowed = Option<usize>;
-
-#[derive(Debug)]
-pub struct Grid<C> {
-    cells: [C; 9],
-    winner: Option<Player>,
-    only_allowed: OnlyAllowed, // None when all of them are allowed
-}
-
-impl<C> Grid<C> {
-    pub fn new() -> Self
-    where
-        C: Default,
-    {
-        Self {
-            cells: Default::default(),
-            winner: None,
-            only_allowed: None,
-        }
-    }
-
-    pub const fn cells(&self) -> &[C; 9] {
-        &self.cells
-    }
-
-    pub const fn winner(&self) -> Option<Player> {
-        self.winner
-    }
-
-    pub const fn allowed(&self, index: usize) -> bool {
-        if let Some(allowed_index) = self.only_allowed {
-            index == allowed_index
-        } else {
-            true
-        }
-    }
-
-    // TODO: there MUST be a cleaner way to do this
-    pub fn update_winner(&mut self)
-    where
-        C: GeneralCell,
-    {
-        self.winner = None;
-
-        let tl = &self.cells[0];
-        let tr = &self.cells[2];
-        let mm = &self.cells[4];
-        let bl = &self.cells[6];
-        let br = &self.cells[8];
-
-        for slope in [[tl, mm, br], [tr, mm, bl]] {
-            if slope.iter().all(|c| c.value().is_some())
-                && slope.iter().map(|c| c.value()).all_equal()
-            {
-                self.winner = slope[0].value();
-                return;
+        let valid = self.subgrids[indices.0 as usize].play(indices.1, player);
+        if valid {
+            if self.subgrids[indices.1 as usize].is_done() {
+                self.only_allowed = None
+            } else {
+                self.only_allowed = Some(indices.1);
             }
         }
 
-        for i in 0..3 {
-            // check rows
-            let mut iter = self.cells.iter().skip(i * 3).take(3).map(C::value);
-            if let Some(winner) = iter
-                .clone()
-                .next()
-                .filter(|cell| cell.is_some() && iter.all_equal())
-            {
-                self.winner = winner.value();
-                break;
-            }
-
-            // check columns
-            let mut iter = self.cells.iter().skip(i).step_by(3).map(C::value);
-            if let Some(winner) = iter
-                .clone()
-                .next()
-                .filter(|cell| cell.is_some() && iter.all_equal())
-            {
-                self.winner = winner.value();
-                break;
-            }
-        }
-    }
-}
-
-impl<C> Default for Grid<C>
-where
-    C: Default,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// a Grid can act as a Cell
-impl<C> GeneralCell for Grid<C>
-where
-    C: GeneralCell,
-{
-    const DEPTH: usize = 1 + C::DEPTH;
-
-    fn play(&mut self, player: Player, mut indices: impl Iterator<Item = usize>) -> PlayResult {
-        let Some(index) = indices.next() else {
-            return Invalid;
-        };
-
-        if !self.allowed(index) {
-            return Invalid;
-        }
-
-        let cell = &mut self.cells[index];
-        let place_result = cell.play(player, indices);
-
-        self.update_winner();
-
-        match place_result {
-            Invalid => return Invalid,
-            SetCell => {}
-            SetIndex(inner_index) => {
-                if self.cells[inner_index].value().is_some() || self.cells[inner_index].is_draw() {
-                    self.only_allowed = None;
-                } else {
-                    self.only_allowed = Some(inner_index);
-                }
-            }
-        };
-
-        SetIndex(index)
+        valid
     }
 
-    fn unplay(&mut self, mut history: impl Iterator<Item = (usize, OnlyAllowed)>) -> bool {
-        let Some((index, only_allowed)) = history.next() else {
-            return false;
-        };
-
-        if !self.cells[index].unplay(history) {
-            return false;
-        }
-
+    pub fn unplay(&mut self, indices: Indices, only_allowed: Option<Index>) {
+        self.subgrids[indices.0 as usize].unplay(indices.1);
         self.only_allowed = only_allowed;
-        self.update_winner();
+    }
+
+    pub fn to_subgrid(&self) -> SubGrid {
+        let mut subgrid = SubGrid::default();
+
+        for (i, grid) in self.subgrids.iter().enumerate() {
+            if let Some(player) = grid.winner() {
+                subgrid.play(i as u8, player);
+            }
+        }
+
+        subgrid
+    }
+
+    pub fn subgrids(&self) -> &[SubGrid] {
+        self.subgrids.as_slice()
+    }
+
+    pub fn winner(&self) -> Option<Player> {
+        self.to_subgrid().winner()
+    }
+
+    pub fn only_allowed(&self) -> Option<Index> {
+        self.only_allowed
+    }
+
+    pub fn is_filled(&self) -> bool {
+        self.to_subgrid().is_filled()
+    }
+
+    pub fn is_valid(&self, indices: Indices) -> bool {
+        let as_subgrid = self.to_subgrid();
+        let done = as_subgrid.is_done();
+        let empty = as_subgrid.empty(indices.0);
+        let outer_allowed = self.only_allowed.map(|i| indices.0 == i).unwrap_or(true);
+        let inner_allowed = self.subgrids[indices.0 as usize].empty(indices.1);
+        !done && empty && outer_allowed && inner_allowed
+    }
+}
+
+impl Drawable for Grid {
+    fn draw(&self, bounds: Rect) {
+        if let Some(winner) = self.winner() {
+            winner.draw(bounds);
+            return;
+        }
+
+        for (i, (subgrid, r)) in self.subgrids.iter().zip(padded_grid(bounds, PADDING)).enumerate() {
+            if let Some(winner) = subgrid.winner() {
+                winner.draw(r);
+                continue;
+            }
+
+            subgrid.draw(r);
+
+            let blocked = self.only_allowed.map(|index| index != i as u8).unwrap_or(false);
+            if blocked {
+                draw_rectangle(r.x, r.y, r.w, r.h, BLOCKED_COLOR);
+            }
+        }
+
+        draw_grid_lines(bounds, bounds.w * THICK_MULT);
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SubGrid {
+    x_bits: u16,
+    o_bits: u16,
+}
+
+impl SubGrid {
+    pub fn at(&self, index: u8) -> Option<Player> {
+        let mask = 1u16 << index;
+
+        if (self.x_bits & mask) != 0 {
+            Some(Player::X)
+        } else if (self.o_bits & mask) != 0 {
+            Some(Player::O)
+        } else {
+            None
+        }
+    }
+
+    pub fn is_filled(&self) -> bool {
+        (self.x_bits | self.o_bits) == 0b111111111
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.is_filled() || self.winner().is_some()
+    }
+
+    pub fn winner(&self) -> Option<Player> {
+        const WIN_MASKS: [u16; 8] = [
+            0b000000111,
+            0b000111000,
+            0b111000000,
+            0b001001001,
+            0b010010010,
+            0b100100100,
+            0b100010001,
+            0b001010100,
+        ];
+
+        for mask in WIN_MASKS {
+            if (self.x_bits & mask) == mask {
+                return Some(Player::X);
+            }
+
+            if (self.o_bits & mask) == mask {
+                return Some(Player::O);
+            }
+        }
+
+        None
+    }
+
+    pub fn play(&mut self, index: u8, player: Player) -> bool {
+        if !self.empty(index) {
+            return false;
+        }
+
+        let mask = 1u16 << index;
+        match player {
+            Player::X => self.x_bits |= mask,
+            Player::O => self.o_bits |= mask,
+        }
 
         true
     }
 
-    fn is_draw(&self) -> bool {
-        self.cells
-            .iter()
-            .all(|c| c.is_draw() || c.value().is_some())
+    pub fn unplay(&mut self, index: u8) {
+        let mask = 1u16 << index;
+        self.x_bits &= !mask;
+        self.o_bits &= !mask;
     }
 
-    fn value(&self) -> Option<Player> {
-        self.winner()
+    pub fn empty(&self, index: u8) -> bool {
+        let mask = 1u16 << index;
+        let cells = self.x_bits | self.o_bits;
+        (cells & mask) == 0
     }
+}
 
-    fn get_history(&self, mut indices: impl Iterator<Item = usize>) -> Option<VecDeque<AllowedStatus>> {
-        let index = indices.next()?;
-        let mut history = self.cells[index].get_history(indices)?;
-        history.push_front((index, self.only_allowed));
-        Some(history)
-    }
+impl Drawable for SubGrid {
+    fn draw(&self, bounds: Rect) {
+        draw_grid_lines(bounds, bounds.w * THICK_MULT);
 
-    fn allowed_indices(&self) -> AllowedIndices {
-        match self.only_allowed {
-            Some(index) => AllowedIndices::Only(index),
-            None => AllowedIndices::Everything,
+        for (i, cell_bounds) in padded_grid(bounds, PADDING).enumerate() {
+            if let Some(player) = self.at(i as u8) {
+                player.draw(cell_bounds)
+            }
         }
     }
 }
 
-pub enum AllowedIndices {
-    Everything,
-    Nothing,
-    Only(usize),
-}
+fn draw_grid_lines(bounds: Rect, thick: f32) {
+    for r in Layout::new(bounds, 3, 1).iter().take(2) {
+        let x = r.x + r.w;
+        let y1 = r.y;
+        let y2 = y1 + r.h;
+        draw_line(x, y1, x, y2, thick, GRID_LINES_COLOR);
+    }
 
-impl IntoIterator for AllowedIndices {
-    type IntoIter = AllowedIndicesIter;
-
-    type Item = usize;
-
-    fn into_iter(self) -> Self::IntoIter {
-        AllowedIndicesIter {
-            state: self,
-            index: 0,
-        }
+    for r in Layout::new(bounds, 1, 3).iter().take(2) {
+        let y = r.y + r.h;
+        let x1 = r.x;
+        let x2 = x1 + r.w;
+        draw_line(x1, y, x2, y, thick, GRID_LINES_COLOR);
     }
 }
 
-pub struct AllowedIndicesIter {
-    state: AllowedIndices,
-    index: usize,
+pub fn padded_grid(bounds: Rect, pad: f32) -> impl Iterator<Item = Rect> {
+    Layout::new(bounds, 3, 3).into_iter().map(move |r| r.pad(pad))
 }
-
-impl Iterator for AllowedIndicesIter {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.state {
-            AllowedIndices::Everything if self.index < 9 => {
-                let index = constants::INDICES_ORDER[self.index];
-                self.index += 1;
-                Some(index)
-            },
-
-            AllowedIndices::Only(index) => {
-                self.state = AllowedIndices::Nothing;
-                Some(index)
-            },
-
-            _ => None,
-        }
-    }
-}
-

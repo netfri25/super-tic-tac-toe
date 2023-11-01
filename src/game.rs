@@ -1,114 +1,80 @@
-use std::collections::VecDeque;
-
 use macroquad::prelude::*;
 
-use crate::bot::{Suggestion, get_best_moves};
-use crate::constants::PAD;
-use crate::draw::pad_rect;
-use crate::grid::{Cell, GeneralCell, Grid, Player, AllowedStatus};
+use crate::draw::{Drawable, Paddable};
+use crate::get_cells;
+use crate::grid::Grid;
+use crate::player::Player;
+use crate::utils::{PADDING, BLOCKED_COLOR, Indices, Index};
 
-pub type GameGrid = Grid<Grid<Cell>>;
+struct History {
+    only_allowed: Option<Index>,
+    indices: Indices,
+}
 
 pub struct Game {
-    pub grid: GameGrid,
-    pub turn: Player,
-    pub history: Vec<VecDeque<AllowedStatus>>,
-    pub suggest: bool,
-    pub suggestion: Option<Suggestion>,
+    grid: Grid,
+    turn: Player,
+    history: Vec<History>,
 }
 
 impl Game {
     pub fn new() -> Self {
-        Game {
-            grid: Grid::new(),
+        Self {
+            grid: Grid::default(),
             turn: Player::X,
             history: Vec::new(),
-            suggest: false,
-            suggestion: None,
         }
     }
 
-    pub fn mouse_press(&mut self, bounds: Rect) -> bool {
-        let indices = IndicesGenerator::new(mouse_position().into(), bounds);
-        self.play(indices)
+    pub fn clone_grid(&self) -> Grid {
+        self.grid.clone()
     }
 
-    pub fn play(&mut self, indices: impl Iterator<Item = usize> + Clone) -> bool {
-        let Some(history) = self.grid.get_history(indices.clone()) else {
-            return false
+    pub fn turn(&self) -> Player {
+        self.turn
+    }
+
+    pub fn play(&mut self, indices: (u8, u8)) -> bool {
+        let only_allowed = self.grid.only_allowed();
+        let played = self.grid.play(indices, self.turn);
+        if played {
+            self.turn = self.turn.other();
+            self.history.push(History {
+                only_allowed,
+                indices,
+            });
+        }
+
+        played
+    }
+
+    pub fn undo(&mut self) {
+        let Some(History { only_allowed, indices }) = self.history.pop() else {
+            return;
         };
 
-        let placed = self.grid.play(self.turn, indices.clone());
+        self.grid.unplay(indices, only_allowed);
+        self.turn = self.turn.other();
+    }
 
-        let valid = placed.is_valid();
-        if valid {
-            self.turn.switch();
-            self.history.push(history);
+    pub fn finished(&self) -> bool {
+        self.grid.is_filled() || self.grid.winner().is_some()
+    }
+}
+
+impl Drawable for Game {
+    fn draw(&self, bounds: Rect) {
+        self.grid.draw(bounds);
+
+        let mpos = mouse_position().into();
+        let cell = get_cells().find(|(_, r)| r.contains(mpos));
+
+        if let Some((indices, r)) = cell {
+            if self.grid.is_valid(indices) {
+                let r = r.pad(PADDING);
+                draw_rectangle(r.x, r.y, r.w, r.h, BLOCKED_COLOR);
+            }
         }
-
-        valid
-    }
-
-    pub fn rewind_step(&mut self) {
-        if let Some(last) = self.history.pop() {
-            self.grid.unplay(last.into_iter());
-            self.turn.switch();
-        }
-    }
-
-    pub fn new_suggestion(&mut self) -> Option<&Suggestion> {
-        if !self.suggest {
-            return None
-        }
-
-        self.suggestion = Some(get_best_moves(self));
-        self.suggestion.as_ref()
     }
 }
 
-impl Default for Game {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Clone)]
-struct IndicesGenerator {
-    position: Vec2,
-    bounds: Rect,
-}
-
-impl IndicesGenerator {
-    pub fn new(position: Vec2, bounds: Rect) -> Self {
-        Self { position, bounds }
-    }
-}
-
-impl Iterator for IndicesGenerator {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let norm_pos = (self.position - self.bounds.point()) / self.bounds.size();
-        let index = grid_index(norm_pos)?;
-
-        let row = (index / 3) as f32;
-        let col = (index % 3) as f32;
-        let w = self.bounds.w / 3.;
-        let h = self.bounds.h / 3.;
-        let x = col * w + self.bounds.x;
-        let y = row * h + self.bounds.y;
-        self.bounds = pad_rect(Rect::new(x, y, w, h), PAD);
-
-        Some(index)
-    }
-}
-
-fn grid_index(Vec2 { x, y }: Vec2) -> Option<usize> {
-    if !(0f32..=1f32).contains(&x) || !(0f32..=1f32).contains(&y) {
-        return None;
-    }
-    let col = x * 3.;
-    let row = y * 3.;
-    let index = row as usize * 3 + col as usize;
-    Some(index)
-}
