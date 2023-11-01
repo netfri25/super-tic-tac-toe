@@ -1,13 +1,13 @@
 use macroquad::prelude::*;
 
 use crate::draw::{Drawable, Paddable};
-use crate::grid::{Grid, Index, padded_grid};
+use crate::grid::{Grid, padded_grid};
 use crate::player::Player;
-use crate::utils::{PADDING, BLOCKED_COLOR};
+use crate::utils::{PADDING, BLOCKED_COLOR, Indices, Index};
 
 struct History {
     only_allowed: Option<Index>,
-    indices: (u8, u8),
+    indices: Indices,
 }
 
 pub struct Game {
@@ -33,14 +33,14 @@ impl Game {
         self.turn
     }
 
-    pub fn play(&mut self, outer_index: u8, inner_index: u8) -> bool {
+    pub fn play(&mut self, indices: (u8, u8)) -> bool {
         let only_allowed = self.grid.only_allowed();
-        let played = self.grid.play(self.turn, outer_index, inner_index);
+        let played = self.grid.play(indices, self.turn);
         if played {
             self.turn = self.turn.other();
             self.history.push(History {
                 only_allowed,
-                indices: (outer_index, inner_index),
+                indices,
             });
         }
 
@@ -52,7 +52,7 @@ impl Game {
             return;
         };
 
-        self.grid.unplay(indices.0, indices.1, only_allowed);
+        self.grid.unplay(indices, only_allowed);
         self.turn = self.turn.other();
     }
 }
@@ -73,7 +73,8 @@ impl Drawable for Game {
             });
 
         if let Some(((i, j), r)) = rect {
-            if self.grid.is_valid(i as u8, j as u8) {
+            let indices = (i as u8, j as u8);
+            if self.grid.is_valid(indices) {
                 let r = r.pad(PADDING);
                 draw_rectangle(r.x, r.y, r.w, r.h, BLOCKED_COLOR);
             }

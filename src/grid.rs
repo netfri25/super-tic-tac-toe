@@ -3,9 +3,7 @@ use macroquad::prelude::*;
 use crate::draw::{Drawable, Paddable};
 use crate::layout::Layout;
 use crate::player::Player;
-use crate::utils::{PADDING, THICK_MULT, BLOCKED_COLOR, GRID_LINES_COLOR};
-
-pub type Index = u8;
+use crate::utils::{PADDING, THICK_MULT, BLOCKED_COLOR, GRID_LINES_COLOR, Indices, Index};
 
 #[derive(Debug, Default, Clone)]
 pub struct Grid {
@@ -14,26 +12,26 @@ pub struct Grid {
 }
 
 impl Grid {
-    pub fn play(&mut self, player: Player, outer_index: u8, inner_index: u8) -> bool {
-        let can_interact = self.only_allowed.map(|i| outer_index == i).unwrap_or(true);
-        if !can_interact || self.subgrids[outer_index as usize].is_done() {
+    pub fn play(&mut self, indices: Indices, player: Player) -> bool {
+        let can_interact = self.only_allowed.map(|i| indices.0 == i).unwrap_or(true);
+        if !can_interact || self.subgrids[indices.0 as usize].is_done() {
             return false
         }
 
-        let valid = self.subgrids[outer_index as usize].play(inner_index, player);
+        let valid = self.subgrids[indices.0 as usize].play(indices.1, player);
         if valid {
-            if self.subgrids[inner_index as usize].is_done() {
+            if self.subgrids[indices.1 as usize].is_done() {
                 self.only_allowed = None
             } else {
-                self.only_allowed = Some(inner_index);
+                self.only_allowed = Some(indices.1);
             }
         }
 
         valid
     }
 
-    pub fn unplay(&mut self, outer_index: u8, inner_index: u8, only_allowed: Option<Index>) {
-        self.subgrids[outer_index as usize].unplay(inner_index);
+    pub fn unplay(&mut self, indices: Indices, only_allowed: Option<Index>) {
+        self.subgrids[indices.0 as usize].unplay(indices.1);
         self.only_allowed = only_allowed;
     }
 
@@ -65,12 +63,12 @@ impl Grid {
         self.to_subgrid().is_filled()
     }
 
-    pub fn is_valid(&self, outer_index: u8, inner_index: u8) -> bool {
+    pub fn is_valid(&self, indices: Indices) -> bool {
         let as_subgrid = self.to_subgrid();
         let done = as_subgrid.is_done();
-        let empty = as_subgrid.empty(outer_index);
-        let outer_allowed = self.only_allowed.map(|i| outer_index == i).unwrap_or(true);
-        let inner_allowed = self.subgrids[outer_index as usize].empty(inner_index);
+        let empty = as_subgrid.empty(indices.0);
+        let outer_allowed = self.only_allowed.map(|i| indices.0 == i).unwrap_or(true);
+        let inner_allowed = self.subgrids[indices.0 as usize].empty(indices.1);
         !done && empty && outer_allowed && inner_allowed
     }
 }

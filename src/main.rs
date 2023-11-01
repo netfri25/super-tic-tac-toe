@@ -66,13 +66,15 @@ impl App {
             return;
         };
 
-        if !self.game.play(indices.0, indices.1) {
+        if !self.game.play(indices) {
             return;
         }
 
-        if let Some((indices, eval)) = bot::best_indices(self.game.clone_grid(), self.game.turn()) {
+        if let Some((indices, eval)) = bot::best_indices(self.game.clone_grid(), self.game.turn()).pop() {
             println!("best eval: {}", eval);
-            self.game.play(indices.0, indices.1);
+            if !self.game.play(indices) {
+                panic!("unable to play {:?}", indices);
+            }
         } else {
             println!("no moves?");
         };
