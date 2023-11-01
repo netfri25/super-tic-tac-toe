@@ -83,6 +83,27 @@ impl App {
         });
 
         self.turn = self.turn.other();
+
+        // TODO: abstract away the bot play
+        let best_indices = bot::best_indices(self.grid.clone(), self.turn);
+        let Some((indices, eval)) = best_indices else {
+            eprintln!("no moves?");
+            return
+        };
+
+        println!("best eval: {}", eval);
+
+        let played = self.grid.play(self.turn, indices.0, indices.1);
+        if !played {
+            return
+        }
+
+        self.history.push(History {
+            only_allowed,
+            indices,
+        });
+
+        self.turn = self.turn.other();
     }
 
     pub fn undo(&mut self) {
