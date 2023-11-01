@@ -83,16 +83,16 @@ impl App {
             return;
         }
 
-        // if let Some((indices, eval)) =
-        //     bot::best_indices(self.game.clone_grid(), self.game.turn()).pop()
-        // {
-        //     println!("best eval: {}", eval);
-        //     if !self.game.play(indices) {
-        //         panic!("unable to play {:?}", indices);
-        //     }
-        // } else {
-        //     println!("no moves?");
-        // };
+        if let Some((indices, eval)) =
+            bot::best_indices(self.game.clone_grid(), self.game.turn()).pop()
+        {
+            println!("{:?}: {}", indices, eval);
+            if !self.game.play(indices) {
+                panic!("unable to play {:?}", indices);
+            }
+        } else {
+            println!("no moves?");
+        };
     }
 
     fn new_suggestions(&mut self) {
@@ -124,7 +124,7 @@ impl Drawable for App {
         };
 
         let cells = get_cells().collect_vec();
-        let font_size = screen_height() / 50.;
+        let font_size = screen_height() / 30.;
         if let Some(ref suggest) = self.suggest {
             for (i, &(indices, eval)) in suggest.iter().enumerate() {
                 let text = format!("{:?}: {}", indices, eval);
