@@ -13,7 +13,7 @@ mod player;
 use player::Player;
 
 mod utils;
-use utils::PADDING;
+use utils::{PADDING, BLOCKED_COLOR};
 
 #[macroquad::main(window_conf)]
 async fn main() {
@@ -138,7 +138,26 @@ impl Default for App {
 
 impl Drawable for App {
     fn draw(&self, bounds: Rect) {
-        self.grid.draw(bounds.pad(PADDING / 2.));
+        let bounds = bounds.pad(PADDING / 2.);
+        self.grid.draw(bounds);
+
+        let mpos = mouse_position().into();
+        let rect = padded_grid(bounds, PADDING)
+            .enumerate()
+            .find(|(_, r)| r.contains(mpos))
+            .and_then(|(i, inner_grid)| {
+                padded_grid(inner_grid, PADDING)
+                    .enumerate()
+                    .find(|(_, r)| r.contains(mpos))
+                    .map(|(j, r)| ((i, j), r))
+            });
+
+        if let Some(((i, j), r)) = rect {
+            if self.grid.is_valid(i as u8, j as u8) {
+                let r = r.pad(PADDING);
+                draw_rectangle(r.x, r.y, r.w, r.h, BLOCKED_COLOR);
+            }
+        }
     }
 }
 

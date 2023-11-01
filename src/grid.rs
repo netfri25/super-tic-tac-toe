@@ -64,6 +64,12 @@ impl Grid {
     pub fn is_filled(&self) -> bool {
         self.to_subgrid().is_filled()
     }
+
+    pub fn is_valid(&self, outer_index: u8, inner_index: u8) -> bool {
+        let outer_allowed = self.only_allowed.map(|i| outer_index == i).unwrap_or(true);
+        let inner_allowed = self.subgrids[outer_index as usize].empty(inner_index);
+        outer_allowed && inner_allowed
+    }
 }
 
 impl Drawable for Grid {
@@ -172,12 +178,11 @@ impl SubGrid {
 
 impl Drawable for SubGrid {
     fn draw(&self, bounds: Rect) {
-        let bounds = bounds.pad(PADDING);
         draw_grid_lines(bounds, bounds.w * THICK_MULT);
 
         for (i, cell_bounds) in padded_grid(bounds, PADDING).enumerate() {
             if let Some(player) = self.at(i as u8) {
-                player.draw(cell_bounds.pad(PADDING))
+                player.draw(cell_bounds)
             }
         }
     }
