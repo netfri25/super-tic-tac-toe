@@ -53,6 +53,10 @@ impl App {
             self.new_suggestions();
         }
 
+        if is_key_pressed(KeyCode::R) {
+            self.game = Game::new();
+        }
+
         if is_key_pressed(KeyCode::Escape) {
             return false;
         }
@@ -83,16 +87,13 @@ impl App {
             return;
         }
 
-        if let Some((indices, eval)) =
+        if let Some((indices, _eval)) =
             bot::best_indices(self.game.clone_grid(), self.game.turn()).pop()
         {
-            println!("{:?}: {}", indices, eval);
             if !self.game.play(indices) {
                 panic!("unable to play {:?}", indices);
             }
-        } else {
-            println!("no moves?");
-        };
+        }
     }
 
     fn new_suggestions(&mut self) {
